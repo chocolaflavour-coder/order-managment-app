@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>برنامج إدارة الطلبات</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <!-- QuaggaJS library for barcode scanning -->
+    <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js"></script>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            direction: rtl;
+        }
+        #interactive.viewport {
+            position: relative;
+            width: 100%;
+            height: auto;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        #interactive.viewport canvas, #interactive.viewport video {
+            width: 100%;
+            height: 100%;
+        }
+        #interactive.viewport .drawingBuffer {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-4 min-h-screen flex items-center justify-center">
+
+    <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">برنامج إدارة الطلبات</h1>
+        <p class="text-sm text-gray-500 mb-6 text-center">معرف المستخدم: <span id="userIdDisplay" class="font-mono text-gray-700">جارٍ التحميل...</span></p>
+
+        <!-- Admin Login Section -->
+        <div id="adminLoginSection" class="space-y-4">
+            <h2 class="text-xl font-semibold text-gray-800 text-center mb-4">الدخول كمدير</h2>
+            <input type="password" id="adminIdInput" placeholder="أدخل رمز المدير" class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+            <button id="adminLoginBtn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                دخول
+            </button>
+        </div>
+
+        <!-- Admin Dashboard -->
+        <div id="adminDashboard" class="hidden">
+            <h2 class="text-xl font-semibold text-gray-800 text-center mb-4">لوحة تحكم المدير</h2>
+            <hr class="my-6 border-gray-200">
+            <!-- Form for adding new products -->
+            <div class="space-y-4">
+                <p class="text-lg font-bold text-gray-700 text-center">إضافة منتج جديد</p>
+                <div>
+                    <label for="adminProductName" class="block text-sm font-medium text-gray-700">اسم المنتج</label>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="adminProductName" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border">
+                        <button id="adminScanBarcodeBtn" class="mt-1 bg-gray-200 text-gray-800 p-2 rounded-md hover:bg-gray-300 transition-colors">
+                            مسح الباركود
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label for="adminProductImage" class="block text-sm font-medium text-gray-700">صورة المنتج</label>
+                    <input type="file" id="adminProductImageFile" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100">
+                    <p class="text-xs text-gray-400 mt-1">يمكنك إضافة صورة من جوالك.</p>
+                </div>
+                <button id="addProductBtn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors">
+                    إضافة منتج
+                </button>
+            </div>
+        </div>
+
+        <!-- User Dashboard -->
+        <div id="userDashboard" class="hidden">
+            <h2 class="text-xl font-semibold text-gray-800 text-center mb-4">قائمة المنتجات</h2>
+        </div>
+
+        <hr class="my-6 border-gray-200">
+        
+        <!-- Barcode Scanner container -->
+        <div id="scannerContainer" class="hidden my-4 p-4 bg-gray-200 rounded-lg text-center">
+            <div id="interactive" class="viewport"></div>
+            <p class="mt-2 text-sm text-gray-600" id="scannerMessage">ضع الباركود أمام الكاميرا.</p>
+            <button id="stopScanBtn" class="mt-4 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">إيقاف المسح</button>
+        </div>
+        
+        <!-- Products List Container -->
+        <div id="productsList" class="space-y-4">
+            <!-- Products will be rendered here -->
+            <p class="text-center text-gray-500">جارٍ تحميل المنتجات...</p>
+        </div>
+
+        <!-- Notification/Alert Modal -->
+        <div id="alertModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden items-center justify-center transition-opacity duration-300 z-50">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
+                <p id="alertMessage" class="text-gray-800 mb-4"></p>
+                <button id="closeAlertBtn" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors">إغلاق</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, doc, deleteDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+
+        // Enable debug logging for Firestore
+        setLogLevel('Debug');
+
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        const ADMIN_ID = "Rahaf1111"; // Your Admin ID
+
+        // --- Firebase Initialization and Authentication ---
+        let db;
+        let auth;
+        let userId;
+
+        const userIdDisplay = document.getElementById('userIdDisplay');
+        const adminLoginSection = document.getElementById('adminLoginSection');
+        const adminDashboard = document.getElementById('adminDashboard');
+        const userDashboard = document.getElementById('userDashboard');
+        const productsList = document.getElementById('productsList');
+        const adminIdInput = document.getElementById('adminIdInput');
+        const adminLoginBtn = document.getElementById('adminLoginBtn');
+        
+        let isAdmin = false;
+
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase config is not available.");
+                customAlert('حدث خطأ في الاتصال. حاول تحديث الصفحة.');
+                userIdDisplay.textContent = 'خطأ في الاتصال';
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Authenticate user
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                userIdDisplay.textContent = userId;
+
+                // Check if user is an admin
+                adminLoginBtn.addEventListener('click', () => {
+                    if (adminIdInput.value === ADMIN_ID) {
+                        isAdmin = true;
+                        adminLoginSection.classList.add('hidden');
+                        adminDashboard.classList.remove('hidden');
+                        userDashboard.classList.add('hidden');
+                        listenForProducts();
+                        customAlert("تم تسجيل الدخول كمدير.");
+                    } else {
+                        customAlert("رمز المدير غير صحيح.");
+                    }
+                });
+
+                // By default, show user interface and listen for products
+                adminLoginSection.classList.remove('hidden');
+                adminDashboard.classList.add('hidden');
+                userDashboard.classList.remove('hidden');
+                listenForProducts();
+
+            } catch (error) {
+                console.error("Firebase initialization or authentication failed:", error);
+                customAlert('حدث خطأ في الاتصال. حاول تحديث الصفحة.');
+                userIdDisplay.textContent = 'خطأ في الاتصال';
+            }
+        }
+
+        // --- Real-time data listener ---
+        function listenForProducts() {
+            const productsCollectionRef = collection(db, `artifacts/${appId}/public/data/products`);
+            
+            // onSnapshot sets up a real-time listener for products
+            onSnapshot(productsCollectionRef, (snapshot) => {
+                const products = [];
+                snapshot.forEach(doc => {
+                    products.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                renderProducts(products);
+            }, (error) => {
+                console.error("Error fetching products:", error);
+                productsList.innerHTML = `<p class="text-center text-red-500">حدث خطأ في تحميل المنتجات.</p>`;
+            });
+        }
+        
+        // --- UI Rendering and Event Handlers ---
+        
+        // Custom alert function
+        function customAlert(message) {
+            const modal = document.getElementById('alertModal');
+            const messageElement = document.getElementById('alertMessage');
+            messageElement.textContent = message;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        document.getElementById('closeAlertBtn').addEventListener('click', () => {
+            document.getElementById('alertModal').classList.add('hidden');
+            document.getElementById('alertModal').classList.remove('flex');
+        });
+
+        const adminProductNameInput = document.getElementById('adminProductName');
+        const adminProductImageInput = document.getElementById('adminProductImageFile');
+        const adminScanBarcodeBtn = document.getElementById('adminScanBarcodeBtn');
+        const addProductBtn = document.getElementById('addProductBtn');
+        const stopScanBtn = document.getElementById('stopScanBtn');
+        const scannerContainer = document.getElementById('scannerContainer');
+        const scannerMessage = document.getElementById('scannerMessage');
+
+        let scannerActive = false;
+
+        // Function to render the products list
+        function renderProducts(products) {
+            productsList.innerHTML = '';
+            if (products.length === 0) {
+                productsList.innerHTML += '<p class="text-center text-gray-500">لا توجد منتجات مسجلة حتى الآن.</p>';
+            } else {
+                products.forEach(product => {
+                    const productItem = document.createElement('div');
+                    productItem.className = 'bg-gray-50 p-4 rounded-lg shadow-sm flex items-center justify-between transition-transform transform hover:scale-[1.01]';
+                    
+                    if (isAdmin) {
+                        // Admin view
+                        productItem.innerHTML = `
+                            <div class="flex-1 min-w-0 flex items-center gap-4">
+                                <img src="${product.image || 'https://placehold.co/64x64/E2E8F0/A0AEC0?text=لا%20صورة'}" alt="${product.name}" class="w-16 h-16 rounded-md object-cover">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900 truncate">اسم المنتج: <span class="text-indigo-600">${product.name}</span></p>
+                                    <p class="text-sm text-gray-500">الباركود: <span class="font-mono">${product.barcode}</span></p>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2 space-x-reverse">
+                                <button data-id="${product.id}" class="edit-product-btn text-blue-500 hover:text-blue-700 font-semibold text-sm transition-colors">
+                                    تعديل
+                                </button>
+                                <button data-id="${product.id}" class="delete-product-btn text-red-500 hover:text-red-700 font-semibold text-sm transition-colors">
+                                    حذف
+                                </button>
+                            </div>
+                        `;
+                    } else {
+                        // User view
+                        productItem.innerHTML = `
+                            <div class="flex-1 min-w-0 flex items-center gap-4">
+                                <img src="${product.image || 'https://placehold.co/64x64/E2E8F0/A0AEC0?text=لا%20صورة'}" alt="${product.name}" class="w-16 h-16 rounded-md object-cover">
+                                <div>
+                                    <p class="text-sm font-medium text-gray-900 truncate">اسم المنتج: <span class="text-indigo-600">${product.name}</span></p>
+                                    <p class="text-sm text-gray-500">الباركود: <span class="font-mono">${product.barcode}</span></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-2 space-x-reverse">
+                                <input type="number" id="quantity-${product.id}" class="w-20 rounded-md border-gray-300 shadow-sm text-sm p-2 border text-center" value="1">
+                                <button data-id="${product.id}" data-name="${product.name}" class="add-order-btn text-white bg-indigo-600 px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">
+                                    أضف للطلبات
+                                </button>
+                            </div>
+                        `;
+                    }
+                    productsList.appendChild(productItem);
+                });
+            }
+
+            // Attach event listeners based on the view
+            if (isAdmin) {
+                document.querySelectorAll('.edit-product-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        editProduct(e.target.dataset.id);
+                    });
+                });
+                document.querySelectorAll('.delete-product-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        deleteProduct(e.target.dataset.id);
+                    });
+                });
+            } else {
+                document.querySelectorAll('.add-order-btn').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const productId = e.target.dataset.id;
+                        const productName = e.target.dataset.name;
+                        const quantity = document.getElementById(`quantity-${productId}`).value;
+                        addOrder(productId, productName, quantity);
+                    });
+                });
+            }
+        }
+
+        // --- Admin Actions ---
+        
+        // Add new product
+        addProductBtn.addEventListener('click', async () => {
+            const name = adminProductNameInput.value.trim();
+            const barcode = adminProductNameInput.value.trim(); // Assuming barcode is the same as the product name for this example
+            const imageFile = adminProductImageInput.files[0];
+
+            if (!name) {
+                customAlert('الرجاء إدخال اسم المنتج.');
+                return;
+            }
+
+            let imageUrl = '';
+            if (imageFile) {
+                try {
+                    // Read the image file as a Data URL (Base64 string)
+                    imageUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target.result);
+                        reader.onerror = (error) => reject(error);
+                        reader.readAsDataURL(imageFile);
+                    });
+                    console.log("Image successfully converted to Base64.");
+                } catch (e) {
+                    console.error("Error converting image to Base64: ", e);
+                    customAlert('حدث خطأ أثناء معالجة الصورة.');
+                    return;
+                }
+            }
+
+            try {
+                const productsCollectionRef = collection(db, `artifacts/${appId}/public/data/products`);
+                await addDoc(productsCollectionRef, {
+                    name: name,
+                    barcode: barcode,
+                    image: imageUrl,
+                    createdAt: new Date()
+                });
+                
+                adminProductNameInput.value = '';
+                adminProductImageInput.value = null;
+                customAlert('تم إضافة المنتج بنجاح!');
+            } catch (e) {
+                console.error("Error adding product: ", e);
+                customAlert('حدث خطأ أثناء إضافة المنتج. حاول مرة أخرى.');
+            }
+        });
+
+        // Edit product
+        async function editProduct(id) {
+            const newName = prompt('تعديل اسم المنتج:');
+            if (newName === null || newName.trim() === '') return;
+
+            const newImage = prompt('تعديل رابط الصورة (Base64):');
+            if (newImage === null) return;
+
+            try {
+                const productRef = doc(db, `artifacts/${appId}/public/data/products`, id);
+                await updateDoc(productRef, {
+                    name: newName.trim(),
+                    image: newImage.trim()
+                });
+                customAlert('تم تعديل المنتج بنجاح!');
+            } catch (e) {
+                console.error("Error updating product: ", e);
+                customAlert('حدث خطأ أثناء تعديل المنتج. حاول مرة أخرى.');
+            }
+        }
+
+        // Delete product
+        async function deleteProduct(id) {
+            const modal = document.getElementById('alertModal');
+            const messageElement = document.getElementById('alertMessage');
+            const closeBtn = document.getElementById('closeAlertBtn');
+
+            messageElement.textContent = 'هل أنت متأكد من حذف هذا المنتج؟';
+            closeBtn.textContent = 'إلغاء';
+            
+            const confirmBtn = document.createElement('button');
+            confirmBtn.textContent = 'نعم، أحذف';
+            confirmBtn.className = 'ml-2 bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors';
+            confirmBtn.onclick = async () => {
+                try {
+                    const productRef = doc(db, `artifacts/${appId}/public/data/products`, id);
+                    await deleteDoc(productRef);
+                    customAlert('تم حذف المنتج بنجاح!');
+                } catch (e) {
+                    console.error("Error removing product: ", e);
+                    customAlert('حدث خطأ أثناء حذف المنتج. حاول مرة أخرى.');
+                } finally {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('flex');
+                    confirmBtn.remove();
+                    closeBtn.textContent = 'إغلاق';
+                }
+            };
+
+            modal.querySelector('.bg-white').appendChild(confirmBtn);
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+
+        // --- User Actions ---
+        
+        async function addOrder(productId, productName, quantity) {
+            const parsedQuantity = parseInt(quantity, 10);
+            if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+                customAlert('الرجاء إدخال كمية صحيحة.');
+                return;
+            }
+
+            try {
+                const ordersCollectionRef = collection(db, `artifacts/${appId}/users/${userId}/orders`);
+                await addDoc(ordersCollectionRef, {
+                    productId: productId,
+                    productName: productName,
+                    quantity: parsedQuantity,
+                    orderedAt: new Date()
+                });
+                customAlert('تم إضافة المنتج إلى طلباتك بنجاح!');
+            } catch (e) {
+                console.error("Error adding order: ", e);
+                customAlert('حدث خطأ أثناء إضافة الطلب. حاول مرة أخرى.');
+            }
+        }
+
+        // --- Barcode Scanning Logic ---
+        adminScanBarcodeBtn.addEventListener('click', () => {
+            scannerContainer.classList.remove('hidden');
+            scannerActive = true;
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: document.querySelector('#interactive'),
+                    constraints: {
+                        width: 640,
+                        height: 480,
+                        facingMode: "environment" // Use the back camera
+                    },
+                },
+                decoder: {
+                    readers: ["ean_reader", "upc_reader", "code_128_reader"]
+                }
+            }, function (err) {
+                if (err) {
+                    console.error(err);
+                    scannerMessage.textContent = 'خطأ: لم يتم العثور على كاميرا أو لا يمكن الوصول إليها.';
+                    return;
+                }
+                Quagga.start();
+                scannerMessage.textContent = 'ضع الباركود أمام الكاميرا.';
+            });
+            
+            Quagga.onDetected((data) => {
+                if (scannerActive) {
+                    console.log("Barcode detected and filled:", data.codeResult.code);
+                    adminProductNameInput.value = data.codeResult.code;
+                    stopScanner();
+                    customAlert('تم مسح الباركود بنجاح!');
+                }
+            });
+        });
+
+        stopScanBtn.addEventListener('click', () => {
+            stopScanner();
+            customAlert('تم إيقاف المسح الضوئي.');
+        });
+
+        function stopScanner() {
+            if (scannerActive) {
+                Quagga.stop();
+                scannerContainer.classList.add('hidden');
+                scannerActive = false;
+            }
+        }
+
+        // Initialize Firebase on window load
+        window.onload = initializeFirebase;
+    </script>
+</body>
+</html>
